@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager;
 import android.content.Context;
 import android.os.Handler;
 
+import java.io.IOException;
 import java.util.Arrays;
 
 
@@ -25,12 +26,15 @@ public class BTLE_Scanner {
 
     private long scanPeriod;
     private int signalStrength;
-
-
+    private int RSSI;
+    private String name;
+    private BluetoothDevice ble2;
 
     public BTLE_Scanner(MainActivity mainActivity, long scanPeriod, int signalStrength)
     {
         ma = mainActivity;
+
+        mScanning = false;
 
         mHandler = new Handler();
 
@@ -67,24 +71,33 @@ public class BTLE_Scanner {
     private void scanLeDevice(final boolean enable){
 
         if(enable && !mScanning) {
-            BTLE_Utils.toast(ma.getApplicationContext(), "Start Bracelet Scan...");
+          //  BTLE_Utils.toast(ma.getApplicationContext(), "Start Bracelet Scan...");
 
             mHandler.postDelayed(new Runnable() {
 
                 @Override
                 public void run() {
-                    BTLE_Utils.toast(ma.getApplicationContext(),"Stopping Bracelet Scan...");
+             //       BTLE_Utils.toast(ma.getApplicationContext(), "Stop Bracelet Scan...");
 
                     mScanning = false;
                     mBluetoothAdapter.stopLeScan(mLeScanCallback);
 
                     ma.stopScan();
+
+             //       mScanning = true;
+             //       mBluetoothAdapter.startLeScan(mLeScanCallback);
+             //       mHandler.postDelayed(this,5000);
+
                 }
             }, scanPeriod);
+
 
             mScanning = true;
 
             mBluetoothAdapter.startLeScan(mLeScanCallback);
+        }
+        else if(!enable){
+            mBluetoothAdapter.stopLeScan(mLeScanCallback);
         }
     }
 
@@ -93,36 +106,65 @@ public class BTLE_Scanner {
                 @Override
                 public void onLeScan(final BluetoothDevice device, int rssi, byte[] scanRecords){
 
-                               final int new_rssi = rssi;
-                             int flag = scanRecords[5];
+                            final int new_rssi = rssi;
+                            final int flag = scanRecords[2]& 0xFF;
+                                name = device.getName();
+                                RSSI = new_rssi;
 
-                               if (rssi > signalStrength && device.getName().contains("BabyBracelet") && flag == 0x01){
+                  //  ma.addDevice(device, new_rssi);
+                               if (new_rssi > signalStrength && /*device.getName().contains("BabyBracelet")&& */flag==0x01){
                                    mHandler.post(new Runnable() {
                                        @Override
                                        public void run() {
                                ma.addDevice(device, new_rssi);
+                              //             setBle(device);
                            }
                        });
                     }
+
                 }
+
             };
-    private boolean parseAdvertisementPacket(final byte[] scanRecords){
+    private int parseAdvertisementPacket(byte[] scanRecords){
 
-        byte[] advertisedData = Arrays.copyOf(scanRecords, scanRecords.length);
+        int currentPos = 0;
+        int advertiseFlag = -1;
 
-        int offset = 0;
-        while (offset < (advertisedData.length - 2)){
-            int len = advertisedData[offset++];
-            if (len == 0)
-                break;
+        while (currentPos < scanRecords.length) {
 
-            int type = advertisedData[offset++];
-            switch(type){
-                case 0x02: // Partial list of 16-bit UUIDs
+            int length = scanRecords[currentPos++] & 0xFF;
 
+            int dataLength = length - 1;
+
+            int fieldType = scanRecords[currentPos++] & 0xFF;
+            switch (fieldType) {
+                case 0x11:
+                    advertiseFlag = scanRecords[currentPos] & 0xFF;
+                    break;
+                default:
+                    break;
             }
+            currentPos += dataLength;
         }
-        return true;
+
+
+        return advertiseFlag;
+    }
+    public int getRSSI(){
+        return RSSI;
+    }
+    public String getName(){
+        return name;
+    }
+    public void makeEmpty(){
+
+        ma.addDevice(getBle(), 0);
+    }
+    public BluetoothDevice getBle(){
+        return ble2;
+    }
+    public void setBle(BluetoothDevice ble){
+         ble2 = ble;
     }
 
 }
